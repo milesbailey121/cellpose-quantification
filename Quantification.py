@@ -69,6 +69,7 @@ def quantify_cell_features(seg_img, tiff_img, fname, norm):
     if norm == True:
         for column in final_results.columns:
             if column in channel_names:
+                #Only normalize marker columns, not cell properties 
                 final_results[column] = z_score_normalize(final_results[column])
     else:
         pass
@@ -90,9 +91,12 @@ def ProcessDirectory(img_dir,mask_dir):
     """Lists files in directorys and assigns filename for each image and mask dictionary"""
     img_file_list = os.listdir(img_dir)
     mask_file_list = os.listdir(mask_dir)
-    img_dict = {key: None for key in img_file_list}
-    mask_dict = {key: None for key in mask_file_list}
-    return img_dict, mask_dict
+    if len(img_file_list) == len(mask_file_list):
+        img_dict = {key: None for key in img_file_list}
+        mask_dict = {key: None for key in mask_file_list}
+        return img_dict, mask_dict
+    else:
+        raise Exception("Mismatch number of files in image and mask directory")
 
 def FileReader(img_dir, mask_dir, img_dict, mask_dict, channel_name_fpath):
     """Generates Image, mask dictionary and channel names"""
@@ -143,13 +147,20 @@ def main(image_directory, mask_directory, marker_path, normalization):
     
     for key1 in img_dict.keys():
         for key2 in mask_dict.keys():
-            # Split key2 to remove "_seg" from the filename
-            base_filename = os.path.splitext(key2)[0]
-            if os.path.splitext(key1)[0] == base_filename.split("_seg")[0]:#Catch _seg for masks in file name 
-                #Adds each image
-                single_cell_image_list.append(quantify_cell_features(mask_dict[key2], img_dict[key1], key1,normalization))
-            else:
-                pass
+            # Split key2 to remove "_seg" from the filename for example npy formats 
+            if key2.__contains__("_seg"): 
+                base_filename = os.path.splitext(key2)[0]
+                if os.path.splitext(key1)[0] == base_filename.split("_seg")[0]:#Catch _seg for masks in file name 
+                    #Adds each image
+                    single_cell_image_list.append(quantify_cell_features(mask_dict[key2], img_dict[key1], key1,normalization))
+                else:
+                    pass
+            else: # Process for non _seg file 
+                if os.path.splitext(key1)[0] == os.path.splitext(key2)[0]:
+                    #Adds each image
+                    single_cell_image_list.append(quantify_cell_features(mask_dict[key2], img_dict[key1], key1,normalization))
+                else:
+                    pass
 
     final_results = pd.concat(single_cell_image_list, ignore_index=True)
     # Write results to Excel file
