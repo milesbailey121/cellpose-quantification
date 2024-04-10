@@ -13,7 +13,8 @@ def z_score_normalize(data):
     normalized_data = (data - mean_val) / std_dev
     return normalized_data
 
-def quantify_cell_features(seg_img, tiff_img, fname):
+def quantify_cell_features(seg_img, tiff_img, fname, norm):
+    """Function for quantifying intensity values and merging with properties"""
     # Initialize DataFrame to store results
     results = []
 
@@ -21,7 +22,7 @@ def quantify_cell_features(seg_img, tiff_img, fname):
     unique_values = np.unique(seg_img)
 
     # Initialize tqdm progress bar
-    pbar = tqdm(total=len(unique_values - 1), desc=f"Quantifing {fname}")
+    pbar = tqdm(total=len(unique_values + 1), desc=f"Quantifing {fname}")
 
     # Iterate through each unique pixel value (excluding background)
     for label in unique_values:
@@ -65,17 +66,19 @@ def quantify_cell_features(seg_img, tiff_img, fname):
     # Concatenate all DataFrames in the list to create the final DataFrame
     final_results = pd.concat(results, ignore_index=True)
 
-    for column in final_results.columns:
-        if column in channel_names:
-            final_results[column] = z_score_normalize(final_results[column])
+    if norm == True:
+        for column in final_results.columns:
+            if column in channel_names:
+                final_results[column] = z_score_normalize(final_results[column])
+    else:
+        pass
 
     return final_results
 
 
 def GetProps(mask, image):
     """Function for quantifying a single channel image
-
-    Returns a table with properites of each cell"""
+    Returns a dataframe with general properites of each cell"""
     properties = ['area', 'centroid', 'perimeter', 'eccentricity', 'solidity', 'orientation']
     dat = measure.regionprops_table(
         mask, image,
@@ -84,6 +87,7 @@ def GetProps(mask, image):
     return dat
 
 def ProcessDirectory(img_dir,mask_dir):
+    """Lists files in directorys and assigns filename for each image and mask dictionary"""
     img_file_list = os.listdir(img_dir)
     mask_file_list = os.listdir(mask_dir)
     img_dict = {key: None for key in img_file_list}
@@ -91,59 +95,65 @@ def ProcessDirectory(img_dir,mask_dir):
     return img_dict, mask_dict
 
 def FileReader(img_dir, mask_dir, img_dict, mask_dict, channel_name_fpath):
+    """Generates Image, mask dictionary and channel names"""
     global channel_names
     channel_names_df = pd.read_csv(channel_name_fpath)
-    channel_names = channel_names_df.columns.values.tolist()
+    # Converts marker names into a list 
+    channel_names = channel_names_df.columns.values.tolist() 
 
     for key in img_dict.keys():
         # Read TIFF file
         tiff_img = tifffile.imread(os.path.join(img_dir,key))
-        tiff_img = tiff_img.transpose(1,2,0)
+        #Transpose (N,X,Y)
+        tiff_img = tiff_img.transpose(1,2,0) # Need to update dynamically 
         img_dict[key] = tiff_img
 
     for key in mask_dict.keys():
         # Read Mask file
-        if key.__contains__(".tif") or key.__contains__(".tiff"):
+        if key.__contains__(".tif") or key.__contains__(".tiff") or key.__contains__(".png"):
             seg_mask = cv2.imread(os.path.join(mask_dir,key), cv2.IMREAD_GRAYSCALE)
         elif key.__contains__(".npy"):
+            #Load _seg.npy files, requires items() due to pickled obj 
             seg_mask = np.load(os.path.join(mask_dir,key), allow_pickle=True).item()
             seg_mask = seg_mask["masks"]
         else:
-            print(f"{key} is not a accepted file format(npy or tiff)")
+            print(f"{key} is not a accepted file format(npy/tiff/png)")
         mask_dict[key] = seg_mask
 
 
     return img_dict, mask_dict
     
 
-def WritetoFile(results):
-    # excel_fpath = "cell_intensity_results_normalised.xlsx"
-    excel_fpath = "cell_intensity_results.xlsx"
+def WritetoFile(results,norm):
+    if norm == True:
+        excel_fpath = "cell_intensity_results_normalised.xlsx"
+    else:
+        excel_fpath = "cell_intensity_results.xlsx"
+
     results.to_excel(excel_fpath, index=False)
 
 # Example usage
 
-def main():
-    global img_dict,mask_dict 
-    img_dir = "data/image"
-    mask_dir = "data/mask"
-    channel_name_fpath = r"markers.csv"
-    img_dict,mask_dict = ProcessDirectory(img_dir,mask_dir)
-    img_dict,mask_dict = FileReader(img_dir, mask_dir, img_dict, mask_dict, channel_name_fpath)
-    result_list = []
+def main(image_directory, mask_directory, marker_path, normalization):
+    #Populates img_dict and mask_dict with filename as keys
+    img_dict,mask_dict = ProcessDirectory(image_directory,mask_directory) 
+    # Adds image and masks corresponding to file names, and also saves channel_name.csv 
+    img_dict,mask_dict = FileReader(image_directory, mask_directory, img_dict, mask_dict, marker_path)
+    single_cell_image_list = []
     
     for key1 in img_dict.keys():
         for key2 in mask_dict.keys():
             # Split key2 to remove "_seg" from the filename
             base_filename = os.path.splitext(key2)[0]
-            if os.path.splitext(key1)[0] == base_filename.split("_seg")[0]:
-                result_list.append(quantify_cell_features(mask_dict[key2], img_dict[key1], key1))
+            if os.path.splitext(key1)[0] == base_filename.split("_seg")[0]:#Catch _seg for masks in file name 
+                #Adds each image
+                single_cell_image_list.append(quantify_cell_features(mask_dict[key2], img_dict[key1], key1,normalization))
             else:
                 pass
 
-    final_results = pd.concat(result_list, ignore_index=True)
+    final_results = pd.concat(single_cell_image_list, ignore_index=True)
     # Write results to Excel file
-    WritetoFile(final_results)
+    WritetoFile(final_results,normalization)
 
 if __name__ == '__main__':
     main()
