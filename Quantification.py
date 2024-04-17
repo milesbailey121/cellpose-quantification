@@ -151,11 +151,10 @@ def FileReader(img_dir, mask_dir, img_dict, mask_dict, channel_name_fpath):
 
 def WritetoFile(results,norm):
     if not norm:#Empty string is seen as False
-        excel_fpath = "cell_intensity_results.xlsx"
+        fpath = "cell_intensity_results.xlsx"
     else:
-        excel_fpath = "cell_intensity_results_normalised.xlsx"
-
-    results.to_excel(excel_fpath, index=False)
+        fpath = "cell_intensity_results_normalised.xlsx"
+    results.to_csv(fpath, index=False)
 
 # Example usage
 
