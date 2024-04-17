@@ -6,12 +6,23 @@ import pandas as pd
 import tifffile
 import os
 from tqdm import tqdm
-
-def z_score_normalize(data):
+from scipy import stats
+def z_score_normalise(data):
     mean_val = data.mean()
     std_dev = data.std()
     normalized_data = (data - mean_val) / std_dev
     return normalized_data
+
+def minmax_normalise(data):
+    min_val = min(data)
+    max_val = max(data)
+    normalized_data = [(x - min_val) / (max_val - min_val) for x in data]
+    return normalized_data
+
+def boxcox_normalise(data):
+    data = data + 1
+    normalised_data, fitted_lambda = stats.boxcox(data)
+    return normalised_data
 
 def quantify_cell_features(seg_img, tiff_img, fname, norm):
     """Function for quantifying intensity values and merging with properties"""
@@ -66,13 +77,23 @@ def quantify_cell_features(seg_img, tiff_img, fname, norm):
     # Concatenate all DataFrames in the list to create the final DataFrame
     final_results = pd.concat(results, ignore_index=True)
 
-    if norm == True:
-        for column in final_results.columns:
-            if column in channel_names:
-                #Only normalize marker columns, not cell properties 
-                final_results[column] = z_score_normalize(final_results[column])
-    else:
-        pass
+    match norm:
+        case "minmax":
+            for column in final_results.columns:
+                if column in channel_names:
+                    #Only normalize marker columns, not cell properties 
+                    final_results[column] = minmax_normalise(final_results[column])
+        case "z-score":
+            for column in final_results.columns:
+                if column in channel_names:
+                    #Only normalize marker columns, not cell properties 
+                    final_results[column] = z_score_normalise(final_results[column])
+
+        case "boxcox":
+            for column in final_results.columns:
+                if column in channel_names:
+                    #Only normalize marker columns, not cell properties 
+                    final_results[column] = boxcox_normalise(final_results[column])
 
     return final_results
 
@@ -129,10 +150,10 @@ def FileReader(img_dir, mask_dir, img_dict, mask_dict, channel_name_fpath):
     
 
 def WritetoFile(results,norm):
-    if norm == True:
-        excel_fpath = "cell_intensity_results_normalised.xlsx"
-    else:
+    if not norm:#Empty string is seen as False
         excel_fpath = "cell_intensity_results.xlsx"
+    else:
+        excel_fpath = "cell_intensity_results_normalised.xlsx"
 
     results.to_excel(excel_fpath, index=False)
 
