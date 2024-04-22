@@ -15,7 +15,7 @@ pip install -r requirements.txt
 
 This program can be run from the command line with the following example command:
 ```
-python RunQuantification-CLI.py ./path/to/images ./path/to/masks markers.csv --normalization
+python RunQuantification-CLI.py ./path/to/images ./path/to/masks markers.csv norm
 ```
 <h3 align="center">Expected Parameters</h2>
 
