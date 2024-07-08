@@ -7,8 +7,7 @@ def parse_args():
     parser.add_argument("image_directory", help="Path to the directory containing images.")
     parser.add_argument("mask_directory", help="Path to the directory containing masks.")
     parser.add_argument("marker_path", help="Path to the markers CSV file.")
-    #parser.add_argument("--normalisation", default=False, action="store_true", help="Flag to perform normalization.")
-    parser.add_argument("normalisation", help="Normalisation Technique")
+    parser.add_argument("--normalisation", choices=["minmax", "log"], help="Normalisation technique to use. Choose 'minmax' or 'log'. If not provided, no normalisation is applied.", default=False)
 
     return parser.parse_args()
 
@@ -24,17 +23,9 @@ def validate_args(image_directory, mask_directory, marker_path,normalisation):
     if not os.path.exists(marker_path):
         raise FileNotFoundError(f"Marker CSV file '{marker_path}' does not exist.")
     
-    match normalisation:
-        case "minmax":
-            pass
-        case "z-score":
-            pass
-        case "boxcox":
-            pass
-        case _:
-            raise ValueError(f"{normalisation} is not supported or not formatted corretly, please use minmax or z-score normalisation")
-            
-        
+    if normalisation and normalisation not in ["minmax", "log"]:
+        raise ValueError(f"{normalisation} is not supported or not formatted correctly. Please use 'log' or 'minmax' normalisation.")
+    
 
     return image_directory, mask_directory, marker_path, normalisation
 
