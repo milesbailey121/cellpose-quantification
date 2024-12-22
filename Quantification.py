@@ -50,6 +50,7 @@ def quantify_cell_features(args, pos):
     seg_img, tiff_img, fname, norm, channel_names = args
     results = []
 
+
     unique_values = np.unique(seg_img)
 
     for label in tqdm(unique_values, desc=f"Quantifying {fname}"):
@@ -93,6 +94,10 @@ def GetProps(mask, image):
     dict: Dictionary of properties for each labeled region.
     """
     properties = ['area', 'centroid', 'perimeter', 'eccentricity', 'solidity', 'orientation']
+    # I have no idea why i have to rotate the masks and images before running it through measure.regionprops_table
+    # Without rotating masks, the centroid positions will be rotated 90 degrees away from the original images????
+    mask = np.rot90(mask,k=1,axes=(1,0))
+    image = np.rot90(image,k=1,axes=(1,0))
     dat = measure.regionprops_table(mask, image, properties=properties)
     return dat
 
@@ -176,6 +181,7 @@ def main(image_directory, mask_directory, marker_path, normalization):
     """
     img_dict, mask_dict = ProcessDirectory(image_directory, mask_directory)
     channel_names_df = pd.read_csv(marker_path)
+    #Converts csv list column names into a list
     channel_names = channel_names_df.columns.values.tolist()
     results = []
 
@@ -186,6 +192,7 @@ def main(image_directory, mask_directory, marker_path, normalization):
             if mask_file.endswith(('.tif', '.tiff')):
                 seg_mask = tifffile.imread(mask_file)
             elif mask_file.endswith('.npy'):
+                #allow pickle is neccesary to access cellpose npy masks
                 seg_mask = np.load(mask_file, allow_pickle=True).item()
                 seg_mask = seg_mask["masks"]
             elif mask_file.endswith('.png'):
