@@ -53,7 +53,7 @@ def quantify_cell_features(args, pos):
 
     unique_values = np.unique(seg_img)
 
-    for label in tqdm(unique_values, desc=f"Quantifying {fname}"):
+    for label in tqdm(unique_values, desc=f"Quantifying {fname}",ascii="░▒█",colour="GREEN"):
         if label == 0:
             continue
 
