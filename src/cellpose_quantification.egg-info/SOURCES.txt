@@ -1,0 +1,12 @@
+LICENSE
+README.md
+pyproject.toml
+src/__init__.py
+src/cellpose_quantify.py
+src/cli.py
+src/cellpose_quantification.egg-info/PKG-INFO
+src/cellpose_quantification.egg-info/SOURCES.txt
+src/cellpose_quantification.egg-info/dependency_links.txt
+src/cellpose_quantification.egg-info/entry_points.txt
+src/cellpose_quantification.egg-info/requires.txt
+src/cellpose_quantification.egg-info/top_level.txt
