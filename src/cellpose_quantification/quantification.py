@@ -5,43 +5,42 @@ import pandas as pd
 import tifffile
 import os
 from tqdm import tqdm
-from scipy import stats
-from multiprocessing import Pool, freeze_support, RLock
 
 def minmax_normalise(data):
     """
-    Normalize the data using min-max normalization.
+    normalise the data using min-max normalisation.
 
     Parameters:
-    data (list or array-like): List or array of values to be normalized.
+    data (list or array-like): List or array of values to be normalised.
 
     Returns:
-    list: Min-max normalized data.
+    list: Min-max normalised data.
     """
     min_val = min(data)
     max_val = max(data)
-    normalized_data = [(x - min_val) / (max_val - min_val) for x in data]
-    return normalized_data
+    normalised_data = [(x - min_val) / (max_val - min_val) for x in data]
+    return normalised_data
 
 def log_normalise(data):
     """
-    Normalize the data using logarithmic normalization.
+    normalise the data using logarithmic normalisation.
 
     Parameters:
-    data (list or array-like): List or array of values to be normalized.
+    data (list or array-like): List or array of values to be normalised.
 
     Returns:
-    array: Logarithmically normalized data.
+    array: Logarithmically normalised data.
     """
+    # We add 1 to avoid log(0)
     normalised_data = np.log10((data + 1))
     return normalised_data
 
-def quantify_cell_features(args, pos):
+def get_cell_features(args):
     """
     Quantify cell features & intensities from segmented and raw images.
 
     Parameters:
-    args (tuple): A tuple containing segmentation image, TIFF image, filename, normalization technique, and channel names.
+    args (tuple): A tuple containing segmentation image, TIFF image, filename, normalisation technique, and channel names.
     pos (int): Position indicator (used for progress bar).
 
     Returns:
@@ -59,13 +58,14 @@ def quantify_cell_features(args, pos):
 
         cell_mask = np.uint16(seg_img == label)
         intensity_dict = {'Cell_ID': label}
-
+        # Calculate mean intensity for each channel
+        # Assuming tiff_img is a 3D array with shape (channels, height, width)
         for channel in range(tiff_img.shape[0]):
             channel_img = tiff_img[channel, :, :]
             mean_intensity = np.mean(channel_img[cell_mask > 0])
             intensity_dict[channel_names[channel]] = mean_intensity
 
-        cell_features = GetProps(cell_mask, tiff_img[0])
+        cell_features = get_props(cell_mask, tiff_img[0])
         cell_data = {**intensity_dict, **cell_features}
         cell_data['Filename'] = fname
         results.append(pd.DataFrame(cell_data, index=[0]))
@@ -82,7 +82,7 @@ def quantify_cell_features(args, pos):
 
     return final_results
 
-def GetProps(mask, image):
+def get_props(mask, image):
     """
     Extract properties of labeled regions in an image.
 
@@ -91,7 +91,7 @@ def GetProps(mask, image):
     image (ndarray): Image from which properties are to be extracted.
 
     Returns:
-    dict: Dictionary of properties for each labeled region.
+    dict: Dictionary of properties for each labeled cell.
     """
     properties = ['area', 'centroid', 'perimeter', 'eccentricity', 'solidity', 'orientation']
     # I have no idea why i have to rotate the masks and images before running it through measure.regionprops_table
@@ -101,12 +101,12 @@ def GetProps(mask, image):
     dat = measure.regionprops_table(mask, image, properties=properties)
     return dat
 
-def ProcessDirectory(img_dir, mask_dir):
+def process_directory(img_dir, mask_dir):
     """
     Process the directories to list all image and mask files.
 
     Parameters:
-    img_dir (str): Path to the image directory.
+    img_dir (str): Path to the image directory, assumes images are in tiff format.
     mask_dir (str): Path to the mask directory.
 
     Returns:
@@ -152,13 +152,13 @@ def find_files(root_dir, extension):
                 file_paths.append(os.path.join(root, file))
     return file_paths
 
-def WritetoFile(results, norm):
+def write_to_file(results, norm):
     """
     Write the results to a CSV file.
 
     Parameters:
     results (DataFrame): DataFrame containing the results.
-    norm (str or bool): Normalization technique or False if not normalized.
+    norm (str or bool): Normalisation technique or False if not normalised.
 
     Returns:
     None
@@ -166,7 +166,7 @@ def WritetoFile(results, norm):
     fpath = "cell_intensity_results_normalised.csv" if isinstance(norm, str) else "cell_intensity_results.csv"
     results.to_csv(fpath, index=False)
 
-def main(image_directory, mask_directory, marker_path, normalization):
+def run(image_directory, mask_directory, marker_path, normalisation):
     """
     Main function to process directories, quantify cell features, and write results to a file.
 
@@ -174,20 +174,20 @@ def main(image_directory, mask_directory, marker_path, normalization):
     image_directory (str): Path to the image directory.
     mask_directory (str): Path to the mask directory.
     marker_path (str): Path to the marker CSV file.
-    normalization (str or bool): Normalization technique or False if not normalized.
+    normalisation (str): normalisation technique or None if not normalised.
 
-    Returns:
-    None
     """
-    img_dict, mask_dict = ProcessDirectory(image_directory, mask_directory)
-    channel_names_df = pd.read_csv(marker_path)
-    #Converts csv list column names into a list
-    channel_names = channel_names_df.columns.values.tolist()
+    img_dict, mask_dict = process_directory(image_directory, mask_directory)
+    # Reads marker csv file, assumes the fist row is the channel/marker names.
+    channel_names = pd.read_csv(marker_path,header=None).values[0]
     results = []
 
     for img_file, mask_file in zip(img_dict.values(), mask_dict.values()):
         try:
             tiff_img = tifffile.imread(img_file)
+            if tiff_img.shape[0] != len(channel_names):
+                print(f"ERROR: The number of channels in {img_file} does not match the number of channels/markers in {marker_path}")
+                continue
 
             if mask_file.endswith(('.tif', '.tiff')):
                 seg_mask = tifffile.imread(mask_file)
@@ -200,11 +200,15 @@ def main(image_directory, mask_directory, marker_path, normalization):
             else:
                 print(f"{mask_file} is not an accepted file format (npy/tiff/png)")
                 continue
+            
+            if seg_mask.shape != tiff_img[0].shape:
+                print(f"ERROR: The shape of the mask {mask_file} does not match the shape of the image {img_file}")
+                continue
+            
+            arglist = [(seg_mask, tiff_img, os.path.basename(img_file), normalisation, channel_names)]
 
-            single_cell_image_list = [(seg_mask, tiff_img, os.path.basename(img_file), normalization, channel_names)]
-
-            for args in single_cell_image_list:
-                results.append(quantify_cell_features(args, pos=0))  # Position 0 indicates no progress bar
+            for args in arglist:
+                results.append(get_cell_features(args))  
 
         except PermissionError as e:
             print(f"PermissionError: {e} for file {img_file} or {mask_file}")
@@ -212,15 +216,5 @@ def main(image_directory, mask_directory, marker_path, normalization):
             print(f"Error: {e} for file {img_file} or {mask_file}")
 
     final_results = pd.concat(results, ignore_index=True)
-    WritetoFile(final_results, normalization)
+    write_to_file(final_results, normalisation)
 
-if __name__ == '__main__':
-    import sys
-    if len(sys.argv) != 5:
-        print("Usage: python RunQuantification-CLI.py <image_directory> <mask_directory> <marker_path> <normalization>")
-    else:
-        image_directory = sys.argv[1]
-        mask_directory = sys.argv[2]
-        marker_path = sys.argv[3]
-        normalization = sys.argv[4]
-        main(image_directory, mask_directory, marker_path, normalization)
