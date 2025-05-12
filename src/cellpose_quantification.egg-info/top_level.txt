@@ -1,4 +1,0 @@
-__init__
-assets
-cellpose_quantify
-cli
